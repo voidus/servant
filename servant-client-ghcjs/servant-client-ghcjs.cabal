@@ -1,6 +1,6 @@
 cabal-version:       >=1.10
 name:                servant-client-ghcjs
-version:             0.14
+version:             0.15
 
 synopsis:            Automatic derivation of querying functions for servant webservices for GHCJS
 category:            Servant, Web
