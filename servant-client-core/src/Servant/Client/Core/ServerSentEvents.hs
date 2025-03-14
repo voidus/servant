@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# OPTIONS_GHC -Wno-error=unused-imports #-}
 
 -- | Server-sent events
 --
@@ -19,41 +20,29 @@ module Servant.Client.Core.ServerSentEvents (
     EventMessageStreamT (..)
 ) where
 
-import           Control.Applicative
-                 (Alternative ((<|>)))
-import           Control.Monad.IO.Class
-                 (MonadIO)
+import           Control.Applicative        (Alternative ((<|>)))
+import           Control.Monad.IO.Class     (MonadIO)
 import qualified Data.Aeson                 as Aeson
 import qualified Data.Attoparsec.ByteString as Attoparsec
 import qualified Data.ByteString            as ByteString
 import qualified Data.ByteString.Char8      as ByteString.Char8
 import qualified Data.ByteString.Lazy       as ByteString.Lazy
-import           Data.Char
-                 (chr)
-import           Data.Coerce
-                 (coerce)
-import           Data.Foldable
-                 (traverse_)
-import           Data.Functor
-                 (void)
+import           Data.Char                  (chr)
+import           Data.Coerce                (coerce)
+import           Data.Foldable              (traverse_)
+import           Data.Functor               (void)
 import qualified Data.Text                  as Text
-import           Data.Text.Encoding
-                 (encodeUtf8)
-import           GHC.Generics
-                 (Generic)
-import           Numeric.Natural
-                 (Natural)
-import           Servant.API.ContentTypes
-                 (EventStreamChunk (..))
-import           Servant.API.Stream
-                 (FromSourceIO (..))
+import           Data.Text.Encoding         (encodeUtf8)
+import           GHC.Generics               (Generic)
+import           Numeric.Natural            (Natural)
+import           Servant.API.ContentTypes   (EventStreamChunk (..))
+import           Servant.API.Stream         (FromSourceIO (..))
 import           Servant.Types.SourceT
                  (SourceT, StepT (..), foreachYieldStep, mapStepT,
                  transformStepWithAtto)
 
 -- For compatibility with GHC <= 8.2
-import           Data.Semigroup
-                 (Semigroup (..))
+import           Data.Semigroup             (Semigroup (..))
 
 -- | Line (or frame) of an event stream
 newtype EventStreamLine = EventStreamLine
@@ -254,7 +243,8 @@ eventsFromMessages =
 --
 newtype EventMessageStreamT m = EventMessageStreamT
     { unEventMessageStreamT :: SourceT m EventMessage }
-    deriving (Show, Semigroup, Monoid)
+    deriving stock (Show)
+    deriving newtype (Semigroup, Monoid)
 
 -- | Server-sent event messages
 --
@@ -262,10 +252,10 @@ newtype EventMessageStreamT m = EventMessageStreamT
 -- than 'Event'.
 --
 instance MonadIO m => FromSourceIO EventStreamChunk (EventMessageStreamT m) where
-    fromSourceIO =
+    fromSourceIO src =
         EventMessageStreamT
         . mapStepT (eventMessagesFromLines . eventLinesFromChunks)
-        . fromSourceIO
+        <$> fromSourceIO src
 
 -- | Server-sent event stream (SSE)
 --
@@ -273,15 +263,16 @@ instance MonadIO m => FromSourceIO EventStreamChunk (EventMessageStreamT m) wher
 --
 newtype EventStreamT m = EventStreamT
     { unEventStreamT :: SourceT m (Event ByteString.ByteString) }
-    deriving (Show, Semigroup, Monoid)
+    deriving stock (Show)
+    deriving newtype (Semigroup, Monoid)
 
 -- | Server-sent events
 instance MonadIO m => FromSourceIO EventStreamChunk (EventStreamT m) where
-    fromSourceIO input =
-        -- 'coerce' is used in place of unpacking and repacking 'EventStreamT'
-        coerce
-            (mapStepT eventsFromMessages)
-            (fromSourceIO input :: EventMessageStreamT m)
+    fromSourceIO input = do
+        src :: EventMessageStreamT m <- fromSourceIO input
+        pure $
+            -- 'coerce' is used in place of unpacking and repacking 'EventStreamT'
+            coerce (mapStepT eventsFromMessages) src
 
 -- | Try to parse event data to JSON.
 jsonEventsFromEvents
@@ -298,13 +289,16 @@ jsonEventsFromEvents =
 -- | Server-sent event stream (SSE) for JSON values
 newtype JsonEventStreamT m a = JsonEventStreamT
     { unJsonEventStreamT :: SourceT m (Event a) }
-    deriving (Show, Functor, Semigroup, Monoid)
+    deriving stock (Show, Functor)
+    deriving newtype (Semigroup, Monoid)
 
 -- | Server-sent JSON event stream
 instance (MonadIO m, Aeson.FromJSON a) => FromSourceIO EventStreamChunk (JsonEventStreamT m a) where
-    fromSourceIO input =
-        -- The 'coerce' efficiently unwraps the 'EventStreamT' and wraps the
-        -- JsonEventStreamT.
-        coerce
-            (mapStepT jsonEventsFromEvents)
-            (fromSourceIO input :: EventStreamT m)
+    fromSourceIO input = do
+        src :: EventStreamT m <- fromSourceIO input
+        pure $
+            -- The 'coerce' efficiently unwraps the 'EventStreamT' and wraps the
+            -- JsonEventStreamT.
+            coerce
+                (mapStepT jsonEventsFromEvents)
+                src

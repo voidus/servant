@@ -2,22 +2,17 @@
 
 module Servant.Client.Core.ServerSentEventsSpec (spec) where
 
-import           Control.Monad.Trans.Except
-                 (runExceptT)
+import           Control.Monad.Trans.Except           (runExceptT)
 import qualified Data.ByteString.Lazy                 as ByteString
-import           Data.Foldable
-                 (for_)
-import           Data.Int
-                 (Int64)
-import           Servant.API.ContentTypes
-                 (EventStreamChunk (..))
+import           Data.Foldable                        (for_)
+import           Data.Int                             (Int64)
+import           Servant.API.ContentTypes             (EventStreamChunk (..))
 import           Servant.API.Stream
                  (FromSourceIO (fromSourceIO))
 import           Servant.Client.Core.ServerSentEvents
                  (Event (..), EventIgnoreReason (EventComment),
                  EventMessage (..), unEventMessageStreamT, unEventStreamT)
-import           Servant.Types.SourceT
-                 (runSourceT, source)
+import           Servant.Types.SourceT                (runSourceT, source)
 import           Test.Hspec
                  (Spec, describe, it, shouldBe)
 
@@ -39,14 +34,16 @@ spec = describe "Servant.Client.Core.ServerSentEvent" $ do
                     ]
 
             for_ [1, 10, 100] $ \chunkSize -> do
-                result <-
-                    runExceptT
-                    $ runSourceT
-                    $ unEventMessageStreamT
-                    $ fromSourceIO
+                src <-
+                    fromSourceIO
                     $ source
                     $ map EventStreamChunk
                     $ chunkify chunkSize allMessages
+
+                result <-
+                    runExceptT
+                    $ runSourceT
+                    $ unEventMessageStreamT src
 
                 result `shouldBe` Right
                     [ EventRetry 30
@@ -78,14 +75,15 @@ spec = describe "Servant.Client.Core.ServerSentEvent" $ do
                     ]
 
             for_ [1, 10, 100] $ \chunkSize -> do
-                result <-
-                    runExceptT
-                    $ runSourceT
-                    $ unEventStreamT
-                    $ fromSourceIO
+                src <-
+                    fromSourceIO
                     $ source
                     $ map EventStreamChunk
                     $ chunkify chunkSize allMessages
+                result <-
+                    runExceptT
+                    $ runSourceT
+                    $ unEventStreamT src
 
                 result `shouldBe` Right
                     [ Event Nothing "Hello World"
